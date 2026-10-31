@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>Business Map</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0f172a">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#0f172a;--ink2:#334155;--dim:#64748b;--line:#e2e8f0;--bg:#f8fafc;--card:#fff;--pri:#2563eb;--pri2:#1d4ed8;
+ --s-todo:#94a3b8;--s-visited:#3b82f6;--s-interested:#f59e0b;--s-follow:#a855f7;--s-signed:#16a34a;--s-no:#ef4444}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;font-family:Inter,system-ui,sans-serif;color:var(--ink);background:var(--bg);overflow:hidden}
+#map{position:fixed;inset:0;z-index:1}
+.view{position:fixed;inset:0;bottom:calc(64px + env(safe-area-inset-bottom));overflow-y:auto;background:var(--bg);z-index:5;display:none;padding:calc(14px + env(safe-area-inset-top)) 14px 20px}
+.view.on{display:block}
+
+/* top bar on map */
+.top{position:fixed;top:calc(10px + env(safe-area-inset-top));left:10px;right:10px;z-index:6;display:flex;gap:8px}
+.search{flex:1;display:flex;align-items:center;background:#fff;border-radius:14px;box-shadow:0 4px 18px rgba(15,23,42,.15);padding:0 6px 0 12px}
+.search input{flex:1;border:none;outline:none;font:500 15px Inter;padding:13px 4px;background:none;min-width:0}
+.search button{border:none;background:none;font-size:17px;padding:8px;cursor:pointer;color:var(--dim)}
+.round{width:48px;height:48px;border-radius:14px;border:none;background:#fff;box-shadow:0 4px 18px rgba(15,23,42,.15);font-size:20px;cursor:pointer;flex:none}
+.results{position:fixed;top:calc(66px + env(safe-area-inset-top));left:10px;right:10px;z-index:7;background:#fff;border-radius:14px;box-shadow:0 8px 28px rgba(15,23,42,.2);overflow:hidden;display:none}
+.results.on{display:block}
+.results button{display:block;width:100%;text-align:left;border:none;background:none;padding:12px 14px;font:14px Inter;border-bottom:1px solid var(--line);cursor:pointer}
+.results button small{display:block;color:var(--dim);font-size:12px;margin-top:2px}
+.legend{position:fixed;left:10px;bottom:calc(76px + env(safe-area-inset-bottom));z-index:6;display:flex;gap:6px;flex-wrap:wrap;max-width:calc(100% - 90px)}
+.legend button{border:none;background:#fff;border-radius:999px;padding:6px 10px;font:600 12px Inter;box-shadow:0 2px 10px rgba(15,23,42,.15);display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--ink2)}
+.legend button.off{opacity:.45}
+.dot{width:10px;height:10px;border-radius:50%;display:inline-block;flex:none}
+.fab{position:fixed;right:14px;bottom:calc(78px + env(safe-area-inset-bottom));z-index:6;width:58px;height:58px;border-radius:18px;border:none;background:var(--pri);color:#fff;font-size:30px;box-shadow:0 10px 24px -6px rgba(37,99,235,.6);cursor:pointer}
+
+/* add mode */
+.cross{position:fixed;left:50%;top:50%;z-index:6;transform:translate(-50%,-100%);font-size:40px;pointer-events:none;display:none;filter:drop-shadow(0 4px 6px rgba(0,0,0,.35))}
+.addbar{position:fixed;left:10px;right:10px;bottom:calc(76px + env(safe-area-inset-bottom));z-index:7;background:#fff;border-radius:18px;box-shadow:0 10px 30px rgba(15,23,42,.25);padding:14px;display:none}
+.addbar p{font-size:14px;color:var(--ink2);margin-bottom:10px}
+body.adding .cross,body.adding .addbar{display:block}
+body.adding .fab,body.adding .legend{display:none}
+
+/* nav */
+nav{position:fixed;left:0;right:0;bottom:0;z-index:8;background:#fff;border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;height:64px;border:none;background:none;font:600 11px Inter;color:var(--dim);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;position:relative}
+nav button span{font-size:21px}
+nav button.on{color:var(--pri)}
+nav .badge{position:absolute;top:8px;left:calc(50% + 8px);background:var(--s-no);color:#fff;font-size:10px;border-radius:99px;padding:1px 6px}
+
+/* list */
+h1{font-size:24px;font-weight:700;letter-spacing:-.4px}
+.subt{color:var(--dim);font-size:13px;margin:2px 0 14px}
+.lsearch{width:100%;border:1px solid var(--line);background:#fff;border-radius:12px;padding:12px;font:15px Inter;outline:none;margin-bottom:10px}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 12px;font:600 12px Inter;color:var(--ink2);display:flex;align-items:center;gap:6px;cursor:pointer}
+.chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.biz{display:flex;gap:12px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:8px;cursor:pointer}
+.biz .ic{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;font-size:20px;flex:none}
+.biz .mid{flex:1;min-width:0}
+.biz b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.biz small{display:block;color:var(--dim);font-size:12px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pill{display:inline-flex;align-items:center;gap:5px;font:600 11px Inter;padding:3px 8px;border-radius:99px;white-space:nowrap}
+.due{font:600 11px Inter;color:var(--s-follow);margin-top:3px}
+.due.late{color:var(--s-no)}
+.emptyl{text-align:center;color:var(--dim);padding:40px 10px;font-size:14px;line-height:1.5}
+
+/* stats */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.tile{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px}
+.tile b{display:block;font-size:28px;font-weight:700;letter-spacing:-.5px}
+.tile small{color:var(--dim);font-size:12px}
+.panel{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
+.panel h3{font-size:14px;margin-bottom:12px}
+.srow{display:flex;align-items:center;gap:10px;margin-bottom:9px;font-size:13px}
+.srow .nm{width:96px;display:flex;align-items:center;gap:6px;color:var(--ink2)}
+.srow .tr{flex:1;height:10px;background:#f1f5f9;border-radius:9px;overflow:hidden}
+.srow .tr i{display:block;height:100%;border-radius:9px}
+.srow .n{width:28px;text-align:right;font-weight:600}
+.btn{display:block;width:100%;padding:13px;border-radius:12px;border:1px solid var(--line);background:#fff;font:600 14px Inter;color:var(--ink);cursor:pointer;margin-top:8px}
+.btn.pri{background:var(--pri);border-color:var(--pri);color:#fff}
+.btn.danger{color:var(--s-no);border-color:#fecaca}
+.hint{color:var(--dim);font-size:12px;line-height:1.45;margin-top:8px}
+
+/* sheet */
+.ov{position:fixed;inset:0;z-index:20;background:rgba(15,23,42,.45);display:none;align-items:flex-end;justify-content:center}
+.ov.on{display:flex}
+.sheet{width:100%;max-width:600px;background:var(--bg);border-radius:22px 22px 0 0;max-height:90dvh;overflow-y:auto;padding:8px 16px calc(20px + env(safe-area-inset-bottom));animation:up .22s ease}
+@keyframes up{from{transform:translateY(30px);opacity:0}}
+.grab{width:40px;height:5px;background:#cbd5e1;border-radius:9px;margin:4px auto 12px}
+.shead{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.shead .ic{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;font-size:24px;flex:none}
+.shead h2{font-size:19px;line-height:1.2}
+.shead small{color:var(--dim);font-size:13px}
+.acts{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
+.acts a,.acts button{display:flex;flex-direction:column;align-items:center;gap:4px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 4px;font:600 11px Inter;color:var(--ink2);text-decoration:none;cursor:pointer}
+.acts span{font-size:20px}
+.acts .dis{opacity:.35;pointer-events:none}
+.lab{display:block;font:600 11px Inter;letter-spacing:.8px;text-transform:uppercase;color:var(--dim);margin:14px 0 6px}
+.inp{width:100%;border:1px solid var(--line);background:#fff;border-radius:12px;padding:12px;font:15px Inter;outline:none;color:var(--ink)}
+.inp:focus{border-color:var(--pri)}
+textarea.inp{resize:vertical;min-height:70px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stats-pick{display:flex;flex-wrap:wrap;gap:6px}
+.stats-pick button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 11px;font:600 12px Inter;color:var(--ink2);display:flex;align-items:center;gap:6px;cursor:pointer}
+.stats-pick button.on{color:#fff}
+.types{display:flex;flex-wrap:wrap;gap:6px}
+.types button{border:1px solid var(--line);background:#fff;border-radius:12px;padding:8px 10px;font:500 13px Inter;cursor:pointer}
+.types button.on{border-color:var(--pri);background:#eff6ff;color:var(--pri2)}
+.log{margin-top:6px}
+.log div{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:6px;font-size:14px;line-height:1.4;white-space:pre-wrap}
+.log small{display:block;color:var(--dim);font-size:11px;margin-bottom:3px}
+.addnote{display:flex;gap:8px}
+.addnote .inp{flex:1}
+.addnote button{border:none;background:var(--pri);color:#fff;border-radius:12px;padding:0 14px;font:600 14px Inter;cursor:pointer}
+.saved{color:var(--s-signed);font-size:12px;font-weight:600;text-align:center;height:16px;margin-top:8px}
+.toast{position:fixed;left:50%;bottom:calc(150px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:12px;font:600 13px Inter;z-index:40;opacity:0;transition:.2s;pointer-events:none;max-width:90%;text-align:center}
+.toast.on{opacity:1}
+
+body.notmap .top,body.notmap .legend,body.notmap .fab,body.notmap .results,body.notmap .addbar,body.notmap .cross{display:none!important}
+/* map pins */
+.pin{width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:3px solid #fff;box-shadow:0 3px 8px rgba(0,0,0,.35);display:grid;place-items:center}
+.pin span{transform:rotate(45deg);font-size:13px}
+.me{width:18px;height:18px;border-radius:50%;background:#2563eb;border:3px solid #fff;box-shadow:0 0 0 6px rgba(37,99,235,.25)}
+.leaflet-popup-content{font:13px Inter;margin:10px 12px}
+.leaflet-popup-content b{font-size:14px}
+.leaflet-control-attribution{font-size:9px}
+.leaflet-top.leaflet-left{top:calc(66px + env(safe-area-inset-top))}
+.noMap{position:fixed;inset:0;z-index:2;display:none;place-items:center;text-align:center;padding:30px;color:var(--dim);font-size:14px;line-height:1.5}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="noMap" id="noMap">The map couldn't load — check your internet connection.<br>Your businesses are still saved; see them in the List tab.</div>
+
+<div class="top" id="top">
+  <div class="search"><input id="q" placeholder="Search an address or place…" enterkeyhint="search"><button id="qGo" aria-label="Search">🔍</button></div>
+  <button class="round" id="locBtn" aria-label="My location">📍</button>
+</div>
+<div class="results" id="results"></div>
+<div class="legend" id="legend"></div>
+<button class="fab" id="fab" aria-label="Add business">+</button>
+<div class="cross">📍</div>
+<div class="addbar"><p><b>Move the map</b> so the pin sits on the business, then tap Add. (Tip: long-press anywhere on the map to drop a pin fast.)</p>
+  <div class="two"><button class="btn" id="addCancel">Cancel</button><button class="btn pri" id="addHere">Add here</button></div></div>
+
+<section class="view" id="vList">
+  <h1>Businesses</h1><div class="subt" id="listSub"></div>
+  <input class="lsearch" id="lq" placeholder="Search name, type, contact, notes…">
+  <div class="chips" id="lchips"></div>
+  <div id="lItems"></div>
+</section>
+
+<section class="view" id="vStats">
+  <h1>Progress</h1><div class="subt">Your outreach at a glance</div>
+  <div id="statsBody"></div>
+  <div class="panel"><h3>Backup &amp; export</h3>
+    <button class="btn" id="csvBtn">⬇️ Export spreadsheet (CSV)</button>
+    <button class="btn" id="bakBtn">💾 Download backup</button>
+    <button class="btn" id="resBtn">♻️ Restore from backup</button>
+    <input type="file" id="resFile" accept=".json,application/json" hidden>
+    <p class="hint">Everything is saved on this phone only. Download a backup now and then so you don't lose your list if you clear Chrome's data or switch phones.</p>
+  </div>
+</section>
+
+<nav>
+  <button class="on" data-v="map"><span>🗺️</span>Map</button>
+  <button data-v="list"><span>📋</span>List<i class="badge" id="dueBadge" style="display:none"></i></button>
+  <button data-v="stats"><span>📊</span>Progress</button>
+</nav>
+
+<div class="ov" id="ov"><div class="sheet" id="sheet"></div></div>
+<div class="toast" id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const HOME=[42.3147,-88.4487]; // Woodstock, IL
+const STATUS={
+  todo:{label:"To visit",color:"var(--s-todo)",hex:"#94a3b8",icon:"⏳"},
+  visited:{label:"Visited",color:"var(--s-visited)",hex:"#3b82f6",icon:"👋"},
+  interested:{label:"Interested",color:"var(--s-interested)",hex:"#f59e0b",icon:"⭐"},
+  follow:{label:"Follow up",color:"var(--s-follow)",hex:"#a855f7",icon:"🔁"},
+  signed:{label:"Signed up",color:"var(--s-signed)",hex:"#16a34a",icon:"✅"},
+  no:{label:"Not interested",color:"var(--s-no)",hex:"#ef4444",icon:"✖️"}
+};
+const TYPES={food:"🍔 Food",retail:"🛍️ Retail",auto:"🚗 Auto",beauty:"💇 Salon/Beauty",trades:"🔧 Trades",health:"🩺 Health",office:"💼 Office/Pro",fitness:"🏋️ Fitness",other:"🏪 Other"};
+const typeEmoji=t=>(TYPES[t]||TYPES.other).split(" ")[0];
+
+let biz=load(),hidden=new Set(),view="map",lfilter="all",openId=null;
+function load(){try{return JSON.parse(localStorage.getItem("bizmap_v1")||"[]")}catch(e){return[]}}
+function save(){try{localStorage.setItem("bizmap_v1",JSON.stringify(biz))}catch(e){toast("Couldn't save — phone storage may be full")}updateBadge()}
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const todayISO=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`};
+function dueInfo(b){if(!b.followUp||b.status==="signed"||b.status==="no")return null;const t=todayISO();
+  if(b.followUp<t)return{late:true,text:"Follow-up overdue · "+fmtDate(b.followUp)};if(b.followUp===t)return{late:true,text:"Follow up today"};return{late:false,text:"Follow up "+fmtDate(b.followUp)}}
+function fmtDate(iso){const [y,m,d]=iso.split("-").map(Number);return new Date(y,m-1,d).toLocaleDateString([],{weekday:"short",month:"short",day:"numeric"})}
+let tT;function toast(m){$("toast").textContent=m;$("toast").classList.add("on");clearTimeout(tT);tT=setTimeout(()=>$("toast").classList.remove("on"),2400)}
+
+/* ---------- map ---------- */
+let map=null,layer=null,meMarker=null;
+if(window.L){
+  map=L.map("map",{zoomControl:false,attributionControl:true}).setView(HOME,14);
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",{maxZoom:20,subdomains:"abcd",
+    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'}).addTo(map);
+  layer=L.layerGroup().addTo(map);
+  map.on("contextmenu",e=>{if(document.body.classList.contains("adding"))return;newBiz(e.latlng)});
+  map.on("popupopen",e=>{const el=e.popup.getElement().querySelector("[data-open]");if(el)el.onclick=()=>{map.closePopup();openSheet(el.dataset.open)}});
+}else{$("noMap").style.display="grid";$("top").style.display="none"}
+
+function pinIcon(b){const s=STATUS[b.status]||STATUS.todo;return L.divIcon({className:"",html:`<div class="pin" style="background:${s.hex}"><span>${typeEmoji(b.type)}</span></div>`,iconSize:[30,30],iconAnchor:[15,30],popupAnchor:[0,-30]})}
+function drawPins(){
+  if(!map)return;layer.clearLayers();
+  biz.filter(b=>!hidden.has(b.status)&&b.lat!=null).forEach(b=>{
+    const s=STATUS[b.status]||STATUS.todo,due=dueInfo(b);
+    L.marker([b.lat,b.lng],{icon:pinIcon(b)}).addTo(layer).bindPopup(`<b>${esc(b.name)}</b><br><span style="color:${s.hex};font-weight:600">${s.icon} ${s.label}</span>${due?`<br><span style="color:${due.late?"#ef4444":"#a855f7"}">${due.text}</span>`:""}<br><a href="#" data-open="${b.id}" onclick="return false" style="font-weight:600">Open details ›</a>`);
+  });
+}
+function drawLegend(){
+  const counts={};biz.forEach(b=>counts[b.status]=(counts[b.status]||0)+1);
+  $("legend").innerHTML=Object.entries(STATUS).filter(([k])=>counts[k]).map(([k,s])=>`<button class="${hidden.has(k)?"off":""}" data-st="${k}"><i class="dot" style="background:${s.hex}"></i>${s.label} ${counts[k]}</button>`).join("");
+}
+$("legend").onclick=e=>{const b=e.target.closest("[data-st]");if(!b)return;const k=b.dataset.st;hidden.has(k)?hidden.delete(k):hidden.add(k);drawLegend();drawPins()};
+
+/* my location */
+$("locBtn").onclick=()=>{
+  if(!navigator.geolocation||!map){toast("Location isn't available here");return}
+  toast("Finding you…");
+  navigator.geolocation.getCurrentPosition(p=>{const ll=[p.coords.latitude,p.coords.longitude];map.setView(ll,17);
+    if(meMarker)meMarker.setLatLng(ll);else meMarker=L.marker(ll,{icon:L.divIcon({className:"",html:'<div class="me"></div>',iconSize:[18,18],iconAnchor:[9,9]}),interactive:false}).addTo(map)},
+  err=>toast(err.code===1?"Allow location for this site in Chrome to use this":"Couldn't get your location"),{enableHighAccuracy:true,timeout:12000});
+};
+
+/* address search (OpenStreetMap Nominatim) */
+async function geocode(q){
+  const u=`https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=us&viewbox=${HOME[1]-.4},${HOME[0]+.3},${HOME[1]+.4},${HOME[0]-.3}&q=${encodeURIComponent(q)}`;
+  const r=await fetch(u,{headers:{"Accept-Language":"en"}});if(!r.ok)throw new Error("search failed");return r.json();
+}
+async function runSearch(){
+  const q=$("q").value.trim();if(!q)return;$("q").blur();
+  $("results").innerHTML='<button disabled>Searching…</button>';$("results").classList.add("on");
+  try{const res=await geocode(q);
+    if(!res.length){$("results").innerHTML='<button disabled>No matches — try adding the town, e.g. "Main St Woodstock IL"</button>';return}
+    $("results").innerHTML=res.map((r,i)=>{const parts=r.display_name.split(", ");return `<button data-i="${i}">${esc(parts[0])}<small>${esc(parts.slice(1,4).join(", "))}</small></button>`}).join("");
+    $("results").onclick=e=>{const b=e.target.closest("[data-i]");if(!b)return;const r=res[+b.dataset.i];$("results").classList.remove("on");
+      map.setView([+r.lat,+r.lon],18);pendingName=r.name||r.display_name.split(", ")[0];pendingAddr=shortAddr(r);startAdd()};
+  }catch(e){$("results").innerHTML='<button disabled>Search needs internet. Try again in a moment.</button>'}
+}
+function shortAddr(r){const a=r.address;if(a){return [[a.house_number,a.road].filter(Boolean).join(" "),a.city||a.town||a.village].filter(Boolean).join(", ")}return r.display_name.split(", ").slice(0,3).join(", ")}
+$("qGo").onclick=runSearch;$("q").addEventListener("keydown",e=>{if(e.key==="Enter")runSearch()});
+document.addEventListener("click",e=>{if(!e.target.closest("#results,.search"))$("results").classList.remove("on")});
+async function reverse(lat,lng){try{const r=await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&zoom=18&addressdetails=1&lat=${lat}&lon=${lng}`);const j=await r.json();return{addr:shortAddr(j),name:j.name||""}}catch(e){return null}}
+
+/* add flow */
+let pendingName="",pendingAddr="",moving=null;
+function startAdd(){if(!map){newBiz(null);return}document.body.classList.add("adding")}
+$("fab").onclick=()=>{pendingName="";pendingAddr="";if(view!=="map")setView("map");startAdd()};
+$("addCancel").onclick=()=>document.body.classList.remove("adding");
+$("addHere").onclick=()=>{document.body.classList.remove("adding");const c=map.getCenter();
+  if(moving){const b=biz.find(x=>x.id===moving);moving=null;$("addHere").textContent="Add here";if(b){b.lat=c.lat;b.lng=c.lng;b.updated=Date.now();save();refresh();toast("Pin moved")}return}
+  newBiz(c)};
+function newBiz(ll){
+  const b={id:"b"+Date.now().toString(36)+Math.random().toString(36).slice(2,5),name:pendingName||"",type:"other",status:"todo",contact:"",phone:"",email:"",address:pendingAddr||"",followUp:"",notes:[],lat:ll?ll.lat:null,lng:ll?ll.lng:null,created:Date.now(),updated:Date.now(),isNew:true};
+  biz.push(b);pendingName="";pendingAddr="";refresh();openSheet(b.id);
+  if(ll&&!b.address)reverse(ll.lat,ll.lng).then(r=>{if(!r)return;const cur=biz.find(x=>x.id===b.id);if(!cur)return;
+    if(!cur.address&&r.addr){cur.address=r.addr;if(openId===b.id&&$("fAddr")&&!$("fAddr").value)$("fAddr").value=r.addr}
+    if(!cur.name&&r.name){cur.name=r.name;if(openId===b.id&&$("fName")&&!$("fName").value)$("fName").value=r.name}save()});
+}
+
+/* ---------- detail sheet ---------- */
+function openSheet(id){
+  const b=biz.find(x=>x.id===id);if(!b)return;openId=id;
+  const s=STATUS[b.status]||STATUS.todo;
+  const tel=(b.phone||"").replace(/[^\d+]/g,"");
+  const dir=b.lat!=null?`https://www.google.com/maps/dir/?api=1&destination=${b.lat},${b.lng}`:b.address?`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(b.address)}`:"";
+  $("sheet").innerHTML=`<div class="grab"></div>
+  <div class="shead"><div class="ic" style="background:${s.hex}22">${typeEmoji(b.type)}</div><div style="flex:1;min-width:0"><h2 id="hName">${esc(b.name)||"New business"}</h2><small id="hSub">${s.icon} ${s.label}${b.address?" · "+esc(b.address):""}</small></div></div>
+  <div class="acts">
+    <a class="${tel?"":"dis"}" href="tel:${tel}"><span>📞</span>Call</a>
+    <a class="${b.email?"":"dis"}" href="mailto:${esc(b.email)}"><span>✉️</span>Email</a>
+    <a class="${dir?"":"dis"}" href="${dir}" target="_blank" rel="noopener"><span>🧭</span>Directions</a>
+    <button id="logVisit"><span>👋</span>Log visit</button>
+  </div>
+  <span class="lab">Business name</span><input class="inp" id="fName" value="${esc(b.name)}" placeholder="e.g. Main Street Bakery">
+  <span class="lab">Status</span><div class="stats-pick" id="fStatus">${Object.entries(STATUS).map(([k,v])=>`<button data-s="${k}" class="${b.status===k?"on":""}" style="${b.status===k?`background:${v.hex};border-color:${v.hex}`:""}"><i class="dot" style="background:${b.status===k?"#fff":v.hex}"></i>${v.label}</button>`).join("")}</div>
+  <span class="lab">Follow-up date</span><div class="two"><input class="inp" type="date" id="fFollow" value="${esc(b.followUp)}"><div class="two"><button class="btn" style="margin:0" data-plus="7">+1 wk</button><button class="btn" style="margin:0" data-plus="14">+2 wk</button></div></div>
+  <span class="lab">Type</span><div class="types" id="fType">${Object.entries(TYPES).map(([k,v])=>`<button data-t="${k}" class="${b.type===k?"on":""}">${v}</button>`).join("")}</div>
+  <span class="lab">Contact person</span><input class="inp" id="fContact" value="${esc(b.contact)}" placeholder="Owner or manager name">
+  <div class="two"><div><span class="lab">Phone</span><input class="inp" id="fPhone" type="tel" value="${esc(b.phone)}" placeholder="(815) 555-0123"></div><div><span class="lab">Email</span><input class="inp" id="fEmail" type="email" value="${esc(b.email)}" placeholder="name@biz.com"></div></div>
+  <span class="lab">Address</span><input class="inp" id="fAddr" value="${esc(b.address)}" placeholder="Street, town">
+  <span class="lab">Notes & visits</span>
+  <div class="addnote"><textarea class="inp" id="fNote" rows="2" placeholder="What happened? What do they need?"></textarea><button id="addNote">Add</button></div>
+  <div class="log" id="log">${noteHtml(b)}</div>
+  <div class="saved" id="saved"></div>
+  <div class="two" style="margin-top:6px"><button class="btn" id="moveBtn">📍 Move pin</button><button class="btn danger" id="delBtn">Delete</button></div>
+  <button class="btn pri" id="doneBtn">Done</button>`;
+  $("ov").classList.add("on");
+  if(b.isNew&&!b.name)setTimeout(()=>$("fName").focus(),250);
+  wireSheet(b);
+}
+function noteHtml(b){return (b.notes||[]).slice().reverse().map(n=>`<div><small>${new Date(n.at).toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}</small>${esc(n.text)}</div>`).join("")||'<p class="hint">No notes yet.</p>'}
+let savedT;
+function touch(b,msg){b.updated=Date.now();delete b.isNew;save();refresh();$("saved").textContent=msg||"Saved ✓";clearTimeout(savedT);savedT=setTimeout(()=>{if($("saved"))$("saved").textContent=""},1500);
+  const s=STATUS[b.status];$("hName").textContent=b.name||"New business";$("hSub").textContent=`${s.icon} ${s.label}${b.address?" · "+b.address:""}`}
+function wireSheet(b){
+  const bind=(id,key)=>{$(id).addEventListener("change",()=>{const v=$(id).value.trim();if((b[key]||"")===v)return;b[key]=v;touch(b);updateActs(b)})};
+  bind("fName","name");bind("fContact","contact");bind("fPhone","phone");bind("fEmail","email");bind("fAddr","address");bind("fFollow","followUp");
+  $("fStatus").onclick=e=>{const x=e.target.closest("[data-s]");if(!x)return;b.status=x.dataset.s;
+    if((b.status==="follow"||b.status==="interested")&&!b.followUp){b.followUp=plusDays(7)}
+    b.notes=b.notes||[];b.notes.push({at:Date.now(),text:`Status → ${STATUS[b.status].label}`});touch(b);openSheetKeep(b);if(b.status==="signed")toast("🎉 Nice work — signed up!")};
+  $("fType").onclick=e=>{const x=e.target.closest("[data-t]");if(!x)return;b.type=x.dataset.t;touch(b);openSheetKeep(b)};
+  $("sheet").querySelectorAll("[data-plus]").forEach(x=>x.onclick=()=>{b.followUp=plusDays(+x.dataset.plus);$("fFollow").value=b.followUp;touch(b,"Follow-up set for "+fmtDate(b.followUp))});
+  $("addNote").onclick=()=>{const t=$("fNote").value.trim();if(!t)return;b.notes=b.notes||[];b.notes.push({at:Date.now(),text:t});$("fNote").value="";$("log").innerHTML=noteHtml(b);touch(b,"Note added ✓")};
+  $("logVisit").onclick=()=>{b.notes=b.notes||[];b.notes.push({at:Date.now(),text:"👋 Visited",visit:true});if(b.status==="todo")b.status="visited";if(!b.followUp)b.followUp=plusDays(7);touch(b,"Visit logged ✓ — follow-up set for next week");openSheetKeep(b)};
+  $("moveBtn").onclick=()=>{if(!map)return;closeSheet();setView("map");if(b.lat!=null)map.setView([b.lat,b.lng],18);moving=b.id;document.body.classList.add("adding");$("addHere").textContent="Move here"};
+  $("delBtn").onclick=()=>{const d=$("delBtn");if(d.dataset.sure!=="1"){d.dataset.sure="1";d.textContent="Tap again to delete";setTimeout(()=>{if($("delBtn")){d.dataset.sure="";d.textContent="Delete"}},2500);return}
+    biz=biz.filter(x=>x.id!==b.id);save();refresh();closeSheet(true);toast("Deleted")};
+  $("doneBtn").onclick=()=>closeSheet();
+}
+function actLinks(b){const tel=(b.phone||"").replace(/[^\d+]/g,"");
+  const dir=b.lat!=null?`https://www.google.com/maps/dir/?api=1&destination=${b.lat},${b.lng}`:b.address?`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(b.address)}`:"";return{tel,dir}}
+function updateActs(b){const {tel,dir}=actLinks(b),a=$("sheet").querySelectorAll(".acts a");if(a.length<3)return;
+  a[0].href="tel:"+tel;a[0].classList.toggle("dis",!tel);a[1].href="mailto:"+(b.email||"");a[1].classList.toggle("dis",!b.email);a[2].href=dir;a[2].classList.toggle("dis",!dir)}
+function openSheetKeep(b){const y=$("sheet").scrollTop;openSheet(b.id);$("sheet").scrollTop=y}
+function plusDays(n){const d=new Date();d.setDate(d.getDate()+n);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`}
+function closeSheet(skipCheck){
+  const b=biz.find(x=>x.id===openId);
+  if(!skipCheck&&b){const pending=$("fNote")&&$("fNote").value.trim();
+    ["fName","fContact","fPhone","fEmail","fAddr","fFollow"].forEach(id=>{const el=$(id);if(el)el.dispatchEvent(new Event("change"))});
+    if(pending){b.notes=b.notes||[];b.notes.push({at:Date.now(),text:pending})}
+    if(b.isNew&&!b.name.trim()){biz=biz.filter(x=>x!==b);save();refresh()}else{delete b.isNew;save();refresh()}}
+  $("ov").classList.remove("on");openId=null;
+}
+$("ov").addEventListener("click",e=>{if(e.target.id==="ov")closeSheet()});
+$("addCancel").addEventListener("click",()=>{moving=null;$("addHere").textContent="Add here"});
+
+/* ---------- list ---------- */
+function drawList(){
+  const q=$("lq").value.toLowerCase().trim();
+  const counts={all:biz.length,due:biz.filter(b=>dueInfo(b)?.late).length};Object.keys(STATUS).forEach(k=>counts[k]=biz.filter(b=>b.status===k).length);
+  const chips=[["all","All",null],["due","Due now","#ef4444"],...Object.entries(STATUS).map(([k,s])=>[k,s.label,s.hex])].filter(([k])=>k==="all"||counts[k]);
+  $("lchips").innerHTML=chips.map(([k,l,c])=>`<button class="chip ${lfilter===k?"on":""}" data-f="${k}">${c?`<i class="dot" style="background:${c}"></i>`:""}${l} ${counts[k]}</button>`).join("");
+  let list=biz.filter(b=>lfilter==="all"||(lfilter==="due"?dueInfo(b)?.late:b.status===lfilter));
+  if(q)list=list.filter(b=>[b.name,b.contact,b.address,b.phone,TYPES[b.type],...(b.notes||[]).map(n=>n.text)].join(" ").toLowerCase().includes(q));
+  list.sort((a,b)=>{const da=dueInfo(a),db=dueInfo(b);if(da?.late!==db?.late)return da?.late?-1:1;if(a.followUp&&b.followUp&&da&&db)return a.followUp<b.followUp?-1:1;if(!!da!==!!db)return da?-1:1;return (b.updated||0)-(a.updated||0)});
+  $("listSub").textContent=`${biz.length} business${biz.length===1?"":"es"} · ${counts.signed} signed up`;
+  $("lItems").innerHTML=list.length?list.map(b=>{const s=STATUS[b.status]||STATUS.todo,due=dueInfo(b);
+    return `<div class="biz" data-id="${b.id}"><div class="ic" style="background:${s.hex}22">${typeEmoji(b.type)}</div><div class="mid"><b>${esc(b.name)||"Unnamed"}</b><small>${esc([b.contact,b.address].filter(Boolean).join(" · ")||TYPES[b.type])}</small>${due?`<div class="due ${due.late?"late":""}">${due.text}</div>`:""}</div><span class="pill" style="background:${s.hex}1f;color:${s.hex}">${s.label}</span></div>`}).join("")
+    :`<div class="emptyl">${biz.length?"Nothing matches.":"No businesses yet.<br>Go to the Map, tap <b>+</b> and drop a pin on a business you want to visit."}</div>`;
+}
+$("lq").oninput=drawList;
+$("lchips").onclick=e=>{const c=e.target.closest("[data-f]");if(c){lfilter=c.dataset.f;drawList()}};
+$("lItems").onclick=e=>{const c=e.target.closest("[data-id]");if(c)openSheet(c.dataset.id)};
+
+/* ---------- stats ---------- */
+function drawStats(){
+  const n=biz.length,signed=biz.filter(b=>b.status==="signed").length,contacted=biz.filter(b=>b.status!=="todo").length;
+  const weekAgo=Date.now()-7*864e5,visits=biz.reduce((a,b)=>a+(b.notes||[]).filter(x=>x.visit&&x.at>weekAgo).length,0);
+  const due=biz.filter(b=>dueInfo(b)?.late).length,weekDue=biz.filter(b=>{const d=dueInfo(b);return d&&b.followUp<=plusDays(7)}).length;
+  const max=Math.max(1,...Object.keys(STATUS).map(k=>biz.filter(b=>b.status===k).length));
+  $("statsBody").innerHTML=`<div class="grid">
+    <div class="tile"><b>${n}</b><small>businesses on your map</small></div>
+    <div class="tile"><b style="color:var(--s-signed)">${signed}</b><small>signed up</small></div>
+    <div class="tile"><b>${contacted?Math.round(signed/contacted*100):0}%</b><small>sign-up rate (of contacted)</small></div>
+    <div class="tile"><b>${visits}</b><small>visits logged this week</small></div></div>
+  <div class="panel"><h3>Pipeline</h3>${Object.entries(STATUS).map(([k,s])=>{const c=biz.filter(b=>b.status===k).length;return `<div class="srow"><span class="nm"><i class="dot" style="background:${s.hex}"></i>${s.label}</span><span class="tr"><i style="width:${c/max*100}%;background:${s.hex}"></i></span><span class="n">${c}</span></div>`}).join("")}</div>
+  <div class="grid"><div class="tile"><b style="color:${due?"var(--s-no)":"inherit"}">${due}</b><small>follow-ups due now</small></div><div class="tile"><b>${weekDue}</b><small>due in the next 7 days</small></div></div>`;
+}
+
+/* ---------- backup / export ---------- */
+function download(name,text,type){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500)}
+$("csvBtn").onclick=()=>{const cols=["Name","Status","Type","Contact","Phone","Email","Address","Follow-up","Latitude","Longitude","Notes"];
+  const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;
+  const rows=biz.map(b=>[b.name,STATUS[b.status]?.label,TYPES[b.type]?.slice(3),b.contact,b.phone,b.email,b.address,b.followUp,b.lat,b.lng,(b.notes||[]).map(n=>new Date(n.at).toLocaleDateString()+": "+n.text).join(" | ")].map(q).join(","));
+  download(`business-map-${todayISO()}.csv`,"﻿"+[cols.join(","),...rows].join("\n"),"text/csv");toast("Spreadsheet downloaded")};
+$("bakBtn").onclick=()=>{download(`business-map-backup-${todayISO()}.json`,JSON.stringify({app:"bizmap",v:1,saved:Date.now(),biz},null,1),"application/json");toast("Backup downloaded")};
+$("resBtn").onclick=()=>$("resFile").click();
+$("resFile").onchange=async()=>{const f=$("resFile").files[0];if(!f)return;try{const j=JSON.parse(await f.text());const list=Array.isArray(j)?j:j.biz;if(!Array.isArray(list))throw 0;
+  const ids=new Set(biz.map(b=>b.id));let added=0;list.forEach(b=>{if(b&&b.id&&!ids.has(b.id)){biz.push(b);added++}});save();refresh();toast(`Restored ${added} business${added===1?"":"es"}`)}catch(e){toast("That file isn't a Business Map backup")}$("resFile").value=""};
+
+/* ---------- views ---------- */
+function setView(v){view=v;document.body.classList.toggle("notmap",v!=="map");if(v!=="map")document.body.classList.remove("adding");document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.v===v));
+  $("vList").classList.toggle("on",v==="list");$("vStats").classList.toggle("on",v==="stats");
+  if(v==="list")drawList();if(v==="stats")drawStats();if(v==="map"&&map)setTimeout(()=>map.invalidateSize(),50)}
+document.querySelector("nav").onclick=e=>{const b=e.target.closest("[data-v]");if(b)setView(b.dataset.v)};
+function updateBadge(){const d=biz.filter(b=>dueInfo(b)?.late).length;$("dueBadge").style.display=d?"":"none";$("dueBadge").textContent=d}
+function refresh(){drawPins();drawLegend();updateBadge();if(view==="list")drawList();if(view==="stats")drawStats()}
+
+refresh();
+if(map&&biz.some(b=>b.lat!=null)){const pts=biz.filter(b=>b.lat!=null).map(b=>[b.lat,b.lng]);if(pts.length>1)map.fitBounds(pts,{padding:[60,60],maxZoom:16});else map.setView(pts[0],16)}
+if("serviceWorker" in navigator&&location.protocol.startsWith("http"))navigator.serviceWorker.register("sw.js").catch(()=>{});
+</script>
+</body>
+</html>
